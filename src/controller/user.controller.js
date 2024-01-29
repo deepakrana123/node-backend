@@ -137,4 +137,55 @@ const logoutUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "User logged out"));
 });
 
-export { registerUser, loginUser, logoutUser };
+const refreshAccessToken = asyncHandler(async (req, res) => {
+  try {
+    const incomingRefreshToken =
+      req.cookies.refreshToken || req.body.refreshToken;
+    if (!incomingRefreshToken) {
+      throw new ApiError(401, "unauthorized token");
+    }
+    const refreshAccess = await jwt.verify(
+      incomingRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET
+    );
+    const user = await User.findById(refreshAccess?._id);
+    if (!user) {
+      throw new ApiError(401, "Invalid refresh Token");
+    }
+    if (incomingRefreshToken !== user.refreshToken) {
+      throw new ApiError(401, "Refresh is invalid or used");
+    }
+    const options = {
+      httpOnly: true,
+      secure: true,
+    };
+    const { generateAccessToken, generateRefreshToken } =
+      await generateAccessandRefreshToken(user._id);
+    return res
+      .status(200)
+      .cookie("accessToken", generateAccessToken, options)
+      .cookie("refreshToken", generateRefreshToken, options)
+      .josn(new ApiResponse(200, user, "Successfully logged In", "sucess"));
+  } catch (error) {
+    throw new ApiError(401, error?.message || "Invalid refresh token");
+  }
+});
+
+
+const changeCurrentPassword=asyncHandler(async(req,res)=>{
+  const {oldPassword,updatedPassword}=req.body
+  const user =await User.findById(req.user._id)
+  const isPasswordCorrect=await user .isPasswordCorrect(oldPassword)
+  if(!isPasswordCorrect){
+    throw new ApiError(400,"Invalid old password")
+  }
+  user.password=updatedPassword
+  await user.save({validateBeforeSave:false})
+  return res.status(200).json(new ApiResponse(200,"","Password Changed Succesfully","success"))
+
+})
+
+const getCurrentUser =asyncHandler(async(req,res)=>{
+  return res.status(200).json(new ApiResponse(200,req.user,"User detail","success"))
+})
+export { registerUser, loginUser, logoutUser,refreshAccessToken,changeCurrentPassword,getCurrentUser };
